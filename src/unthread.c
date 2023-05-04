@@ -21,30 +21,30 @@
 #define UNTHREAD_MAX_RECURSIVE_LOCKS 1024
 #endif
 
-#define CHECK(reason, cond, message, ...)                     \
-  do {                                                        \
-    if (!(cond)) {                                            \
-      fprintf(stderr, NAME ": " message "\n", ##__VA_ARGS__); \
-      exit_reasoned(reason);                                  \
-    }                                                         \
+#define CHECK(reason, cond, message, ...)                                      \
+  do {                                                                         \
+    if (!(cond)) {                                                             \
+      fprintf(stderr, NAME ": " message "\n", ##__VA_ARGS__);                  \
+      exit_reasoned(reason);                                                   \
+    }                                                                          \
   } while (false)
 
-#define CHECK_RET(ret, cond, message, ...) \
-  do {                                     \
-    if (!(cond)) {                         \
-      LOG(message, ##__VA_ARGS__);         \
-      return ret;                          \
-    }                                      \
+#define CHECK_RET(ret, cond, message, ...)                                     \
+  do {                                                                         \
+    if (!(cond)) {                                                             \
+      LOG(message, ##__VA_ARGS__);                                             \
+      return ret;                                                              \
+    }                                                                          \
   } while (false)
 
-#define LOG(message, ...)                                     \
-  do {                                                        \
-    if (verbose) {                                            \
-      fprintf(stderr, NAME ": " message "\n", ##__VA_ARGS__); \
-    }                                                         \
+#define LOG(message, ...)                                                      \
+  do {                                                                         \
+    if (verbose) {                                                             \
+      fprintf(stderr, NAME ": " message "\n", ##__VA_ARGS__);                  \
+    }                                                                          \
   } while (false)
 
-#define ASSERT_UNREACHABLE() \
+#define ASSERT_UNREACHABLE()                                                   \
   (assert(!("Unthread: This should not be reachable")))
 
 static bool verbose;
@@ -206,14 +206,14 @@ struct pthread_fiber {
   __attribute__((aligned(16))) char stack[];
 };
 
-#define DEFAULT_ATTR_INITIALIZER                                              \
-  {                                                                           \
-    {                                                                         \
-      .initialized = true, .detach_state = PTHREAD_CREATE_JOINABLE,           \
-      .guard_size = 0, .inherit_sched = PTHREAD_INHERIT_SCHED,                \
-      .scope = PTHREAD_SCOPE_PROCESS, .sched_param = (struct sched_param){},  \
-      .sched_policy = SCHED_OTHER, .stack_addr = NULL, .stack_size = 1 << 20, \
-    }                                                                         \
+#define DEFAULT_ATTR_INITIALIZER                                               \
+  {                                                                            \
+    {                                                                          \
+      .initialized = true, .detach_state = PTHREAD_CREATE_JOINABLE,            \
+      .guard_size = 0, .inherit_sched = PTHREAD_INHERIT_SCHED,                 \
+      .scope = PTHREAD_SCOPE_PROCESS, .sched_param = (struct sched_param){},   \
+      .sched_policy = SCHED_OTHER, .stack_addr = NULL, .stack_size = 1 << 20,  \
+    }                                                                          \
   }
 
 static const pthread_attr_t default_attr = DEFAULT_ATTR_INITIALIZER;
@@ -228,6 +228,12 @@ static struct pthread_fiber main_thread = {
     .list_index = {-1, -1},
 };
 
+typedef enum {
+  ENTROPY_SOURCE_PRNG,
+  ENTROPY_SOURCE_FILE,
+  ENTROPY_SOURCE_USER_PROVIDED,
+} entropy_source_t;
+
 // Current running thread
 static pthread_t current = &main_thread;
 
@@ -237,8 +243,8 @@ static struct pthread_list threads_ready = PTHREAD_EMPTY_LIST_INITIALIZER;
 // Number of live threads in the system
 static size_t threads_count = 1;
 
-// True if we are using PRNG-based entropy or false if file-based entropy
-static bool noise_prng;
+// The entropy source to use.
+static entropy_source_t entropy_source;
 
 // File for file-based entropy
 static FILE *noise_file;
@@ -254,7 +260,7 @@ void __attribute__((constructor(1000))) pthread_constructor() {
   const char *file_str = getenv(NOISE_FILE_ENV);
 
   if (prng_str != NULL) {
-    noise_prng = true;
+    entropy_source = ENTROPY_SOURCE_PRNG;
 
     const size_t HEX_ELEM_LEN = sizeof(*noise_prng_state) * 2;
     const size_t HEX_ARRAY_LEN = sizeof(noise_prng_state) * 2;
@@ -292,6 +298,29 @@ void __attribute__((constructor(1000))) pthread_constructor() {
 
 static inline uint32_t rotl(const uint32_t x, int k) {
   return (x << k) | (x >> (32 - k));
+}
+
+static uint32_t
+    user_provided_entropy_buffer[NOISE_BUF_SIZE / sizeof(uint32_t)] = {0};
+static size_t user_provided_entropy_buffer_cursor = 0;
+
+void set_entropy_source(const uint8_t *buffer, size_t size) {
+  entropy_source = ENTROPY_SOURCE_USER_PROVIDED;
+  user_provided_entropy_buffer_cursor = 0;
+  size_t min = size;
+  if (min > NOISE_BUF_SIZE) {
+    min = NOISE_BUF_SIZE;
+  }
+  memcpy(user_provided_entropy_buffer, buffer, min);
+}
+
+uint32_t rand_u32_user_provided_entropy(uint32_t len) {
+  CHECK(EXIT_ENTROPY,
+        user_provided_entropy_buffer_cursor ==
+            sizeof(user_provided_entropy_buffer) / sizeof(uint32_t),
+        "Entropy exhausted");
+  return user_provided_entropy_buffer[user_provided_entropy_buffer_cursor] %
+         len;
 }
 
 // xoshiro128** 1.1 PRNG
@@ -383,7 +412,21 @@ static uint32_t rand_u32_io(uint32_t len) {
 }
 
 static uint32_t rand_u32(uint32_t len) {
-  return noise_prng ? rand_u32_prng(len) : rand_u32_io(len);
+  switch (entropy_source) {
+  case ENTROPY_SOURCE_PRNG:
+    return rand_u32_prng(len);
+    break;
+  case ENTROPY_SOURCE_FILE:
+    return rand_u32_io(len);
+    break;
+  case ENTROPY_SOURCE_USER_PROVIDED:
+    return rand_u32_user_provided_entropy(len);
+    break;
+  default:
+    CHECK(EXIT_ILLEGAL, 0, "Invalid entropy source");
+  }
+  // Unreachable
+  return 0;
 }
 
 static void ensure_cap(struct pthread_list *list, size_t additional) {
@@ -734,7 +777,7 @@ int pthread_create(pthread_t *thread, const pthread_attr_t *attr,
       owns_stack ? attr->data.stack_addr : malloc(attr->data.stack_size);
 
   unsigned int id;
-  static unsigned int next_id = 2;  // Start at 2 as main thread is 1
+  static unsigned int next_id = 2; // Start at 2 as main thread is 1
 
   do {
     id = next_id++;
@@ -1100,16 +1143,16 @@ static int mutex_unlock_noyield(pthread_mutex_t *mutex) {
       LOG("%u waking blocked thread %u", current->id, mutex->locked_by->id);
 
       switch (mutex->locked_by->state) {
-        case BLOCK_COND_WAIT:
-        case BLOCK_MUTEX_LOCK:
-          push(&threads_ready, mutex->locked_by);
-          break;
-        case BLOCK_COND_TIMEDWAIT:
-        case BLOCK_MUTEX_TIMEDLOCK:
-          // Already pushed on threads_ready, so don't do anything
-          break;
-        default:
-          ASSERT_UNREACHABLE();
+      case BLOCK_COND_WAIT:
+      case BLOCK_MUTEX_LOCK:
+        push(&threads_ready, mutex->locked_by);
+        break;
+      case BLOCK_COND_TIMEDWAIT:
+      case BLOCK_MUTEX_TIMEDLOCK:
+        // Already pushed on threads_ready, so don't do anything
+        break;
+      default:
+        ASSERT_UNREACHABLE();
       }
     }
   }
@@ -1195,15 +1238,15 @@ int pthread_cond_signal(pthread_cond_t *cond) {
       push(&popped->state_data.cond_mutex->waiting, popped);
 
       switch (popped->state) {
-        case BLOCK_COND_WAIT:
-          break;
-        case BLOCK_COND_TIMEDWAIT:
-          if (!popped->canceled) {
-            pop_specific(&threads_ready, popped);
-          }
-          break;
-        default:
-          ASSERT_UNREACHABLE();
+      case BLOCK_COND_WAIT:
+        break;
+      case BLOCK_COND_TIMEDWAIT:
+        if (!popped->canceled) {
+          pop_specific(&threads_ready, popped);
+        }
+        break;
+      default:
+        ASSERT_UNREACHABLE();
       }
 
       // When a cond_timedwait is triggered or times out, it relocks the

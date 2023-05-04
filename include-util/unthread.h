@@ -9,15 +9,21 @@
 
 #include <pthread.h>
 #include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #ifdef UNTHREAD
 void unthread_yield() { pthread_yield(); }
 
 static inline bool unthread_test() { return true; }
+
+void unthread_set_entropy_source(uint8_t buffer, size_t size);
 #else
-static inline unthread_yield() {}
+static inline void unthread_yield() {}
 
 static inline bool unthread_test() { return false; }
+
+void unthread_set_entropy_source(uint8_t buffer, size_t size);
 #endif
 
 #endif
