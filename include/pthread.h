@@ -7,7 +7,6 @@
 #include <semaphore.h>
 #include <signal.h>
 #include <time.h>
-#include <bits/types/struct_timespec.h>
 
 #ifdef __cplusplus
 extern "C" {
