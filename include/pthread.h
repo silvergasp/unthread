@@ -7,6 +7,11 @@
 #include <semaphore.h>
 #include <signal.h>
 #include <time.h>
+#include <bits/types/struct_timespec.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #define UNTHREAD
 
@@ -201,5 +206,17 @@ int pthread_once(pthread_once_t *once_control, void (*init_routine)(void));
 
 int pthread_getconcurrency(void);
 int pthread_setconcurrency(int new_level);
+
+# ifdef __USE_GNU
+extern int pthread_cond_clockwait (pthread_cond_t *__restrict __cond,
+				   pthread_mutex_t *__restrict __mutex,
+				   __clockid_t __clock_id,
+				   const struct timespec *__restrict __abstime)
+     __nonnull ((1, 2, 4));
+# endif
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

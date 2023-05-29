@@ -1,7 +1,11 @@
 #ifndef PTHREADTYPES_H
 #define PTHREADTYPES_H
 
-#include <bits/types/struct_sched_param.h>
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#include <bits/types/sched.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <time.h>
@@ -128,4 +132,7 @@ typedef struct {
 
 typedef int pthread_once_t;
 
+#ifdef __cplusplus
+}
+#endif
 #endif

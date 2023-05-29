@@ -13,6 +13,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ucontext.h>
+#include <execinfo.h>
+#include <signal.h>
+#include <stdlib.h>
+#include <unistd.h>
 
 #define NAME "unthread"
 #define NOISE_BUF_SIZE 1024
@@ -21,10 +25,20 @@
 #define UNTHREAD_MAX_RECURSIVE_LOCKS 1024
 #endif
 
+void handler(int sig) {
+
+  // print out all the frames to stderr
+  fprintf(stderr, "Error: signal %d:\n", sig);
+}
+
 #define CHECK(reason, cond, message, ...)                                      \
   do {                                                                         \
     if (!(cond)) {                                                             \
       fprintf(stderr, NAME ": " message "\n", ##__VA_ARGS__);                  \
+      void *array[10];                                                         \
+      size_t size;                                                             \
+      size = backtrace(array, 10);                                             \
+      backtrace_symbols_fd(array, size, STDERR_FILENO);                        \
       exit_reasoned(reason);                                                   \
     }                                                                          \
   } while (false)
@@ -2198,3 +2212,14 @@ int pthread_setconcurrency(int new_level) {
   concurrency = new_level;
   return 0;
 }
+
+# ifdef __USE_GNU
+extern int pthread_cond_clockwait (pthread_cond_t * cond,
+				   pthread_mutex_t * mutex,
+				   __clockid_t __clock_id,
+				   const struct timespec *__restrict abstime)
+     {
+  (void)__clock_id;
+  return pthread_cond_timedwait(cond, mutex, abstime);
+}
+# endif
