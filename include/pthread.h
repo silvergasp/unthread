@@ -155,8 +155,8 @@ int pthread_cond_wait(pthread_cond_t *, pthread_mutex_t *);
 
 int pthread_condattr_destroy(pthread_condattr_t *);
 int pthread_condattr_getpshared(const pthread_condattr_t *, int *);
-int pthread_condattr_getclock(pthread_condattr_t *restrict attr,
-                              clockid_t *restrict clock_id);
+int pthread_condattr_getclock(pthread_condattr_t *__restrict attr,
+                              clockid_t *__restrict clock_id);
 int pthread_condattr_init(pthread_condattr_t *);
 int pthread_condattr_setpshared(pthread_condattr_t *, int);
 int pthread_condattr_setclock(pthread_condattr_t *attr, clockid_t clock_id);
@@ -176,8 +176,8 @@ int pthread_rwlock_trywrlock(pthread_rwlock_t *);
 int pthread_rwlock_unlock(pthread_rwlock_t *);
 int pthread_rwlock_wrlock(pthread_rwlock_t *);
 int pthread_rwlockattr_destroy(pthread_rwlockattr_t *);
-int pthread_rwlockattr_getpshared(const pthread_rwlockattr_t *restrict,
-                                  int *restrict);
+int pthread_rwlockattr_getpshared(const pthread_rwlockattr_t *__restrict,
+                                  int *__restrict);
 int pthread_rwlockattr_init(pthread_rwlockattr_t *);
 int pthread_rwlockattr_setpshared(pthread_rwlockattr_t *, int);
 
@@ -187,7 +187,7 @@ int pthread_barrierattr_getpshared(const pthread_barrierattr_t *attr,
                                    int *pshared);
 int pthread_barrierattr_setpshared(pthread_barrierattr_t *attr, int pshared);
 int pthread_barrier_destroy(pthread_barrier_t *barrier);
-int pthread_barrier_init(pthread_barrier_t *restrict barrier,
+int pthread_barrier_init(pthread_barrier_t *__restrict barrier,
                          const pthread_barrierattr_t *attr, unsigned count);
 int pthread_barrier_wait(pthread_barrier_t *barrier);
 
