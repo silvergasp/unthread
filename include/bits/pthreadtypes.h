@@ -5,7 +5,7 @@
 extern "C" {
 #endif
 
-#include <bits/types/sched.h>
+#include <sched.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <time.h>
